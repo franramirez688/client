@@ -24,15 +24,13 @@ class CPPTargetProcessor(object):
         hive_holder = self.client_hive_manager.hive_holder
         resources = hive_holder.resources
         closure = self.client_hive_manager.closure
-        test_patterns = {b.block_name: b.tests for b in hive_holder.block_holders}
 
         for block_cell_name, (resource, _) in closure.iteritems():
             resources[block_cell_name] = resource
 
         # Compute the targets, high level
         mains = compute_mains(hive_holder.settings, resources, self.user_io.out)
-        block_targets = self._define_targets(mains, resources, test_patterns,
-                                             hive_holder.settings)
+        block_targets = self._define_targets(mains, resources, hive_holder)
         self._order_include_paths(block_targets, hive_holder)
         self._define_system_includes(block_targets, mains)
         self._mark_deps(block_targets, hive_holder)
@@ -155,15 +153,22 @@ class CPPTargetProcessor(object):
             for exe in target.exes:
                 order_paths(exe)
 
-    def _define_targets(self, mains, resources, test_patterns, settings):
+    def _define_targets(self, mains, resources, hive_holder):
         '''
         Parameters:
             mains: {BlockCellName: MainInfo}
             resources: {BlockCellName: Resource}
         '''
-
         targets = {}
         get_target = lambda block_name: targets.setdefault(block_name, CPPBlockTargets(block_name))
+
+        test_patterns = {b.block_name: b.tests for b in hive_holder.block_holders}
+        settings = hive_holder.settings
+
+        for block_holder in hive_holder.block_holders:
+            b_name = block_holder.block_name
+            block_target = get_target(b_name)
+            block_target.cpp_std_flags = block_holder.cpp_std
 
         for main, main_info in mains.iteritems():
             # Creation of main target

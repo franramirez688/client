@@ -98,6 +98,7 @@ class CPPBlockTargets(object):
         self.lib = CPPLibTarget(block_name)
         self.exes = []  # Of CPPExeTargets
         self.tests = set()  # Of CPPExeTargets
+        self.cpp_std_flags = []
 
     @property
     def filename(self):
@@ -112,6 +113,10 @@ SET(BII_BLOCK_TESTS {tests})
         vars_content = ["# Automatically generated file, do not edit\n"
                         "SET(BII_IS_DEP %s)\n" % self.is_dep]
         vars_content.append(self.lib.dumps())
+        _flags = '"FLAG %s"' % '"\n\t\t\t"FLAG '.join(self.cpp_std_flags) if self.cpp_std_flags \
+                                                                          else ''
+        cpp_std_content = 'SET(BII_CMAKE_CPP_FLAGS %s)\n' % _flags
+        vars_content.append(cpp_std_content)
         exes = [t.simple_name for t in self.exes]
         tests = [t.simple_name for t in self.tests]
         exes_list = exe_list.format(executables="\n\t\t\t".join(sorted(exes)),

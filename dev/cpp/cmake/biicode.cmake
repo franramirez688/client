@@ -94,7 +94,7 @@ macro(ADD_BIICODE_TARGETS)
 	IF(BII_BLOCK_TESTS)
 		message(STATUS "Initializing variables to create tests with CTest")
 		MESSAGE(STATUS "Added custom target for all the tests: ${TESTS_TARGET}")
-		MESSAGE("-- Following targets are defined like tests (excluded from build)")
+		MESSAGE(STATUS "Following targets are defined like tests (excluded from build)")
 		foreach(test ${BII_BLOCK_TESTS})
 			set(BII_${test}_TARGET "${BII_BLOCK_USER}_${BII_BLOCK_NAME}_${test}")
 			MESSAGE("+ TEST: ${BII_${test}_TARGET}")
@@ -107,6 +107,11 @@ macro(ADD_BIICODE_TARGETS)
 		endforeach()
 	ENDIF()
 
+	##### C++ Flags #######
+	foreach(cpp_flag_args ${BII_CMAKE_CPP_FLAGS})
+		string(REGEX REPLACE " +" ";" valid_cpp_flag_args ${cpp_flag_args})
+		ENABLE_CMAKE_FLAGS(${valid_cpp_flag_args})
+	endforeach()
 endmacro()
 
 
@@ -487,3 +492,153 @@ function(HANDLE_SYSTEM_DEPS target_name ACCESS sys_deps)
 	endif()
 
 endfunction()
+
+#=============================================================================#
+# [PRIVATE/INTERNAL]
+#
+# ENABLE_CMAKE_FLAGS(args)
+#
+#	args  - options(PRIVATE NO_STDLIB)
+#			args_with_one_value(FLAG value TARGET value STDLIB value)
+#
+# Enables CMake CXX flags, e.g., c++11. Parses all the arguments passed
+#
+#=============================================================================#
+
+macro(ENABLE_CMAKE_FLAGS)
+	include(CMakeParseArguments)
+	set(options PRIVATE NO_STDLIB)
+	set(oneValueArg FLAG TARGET STDLIB)
+
+	CMAKE_PARSE_ARGUMENTS("" "${options}" "${oneValueArg}" "" ${ARGN})
+
+	set(TRANSITIVITY PUBLIC)
+    if(_PRIVATE)
+		set(TRANSITIVITY PRIVATE)
+    endif()
+
+    if(NOT _TARGET)
+		set(_TARGET ${BII_BLOCK_TARGET})
+		set(TRANSITIVITY INTERFACE)
+    endif()
+
+    # Only avaliable for OSX systems
+    set(STDLIB )
+    if(APPLE AND NOT _NO_STDLIB)
+	set(STDLIB -stdlib=libc++)
+	if(_STDLIB)
+			# if user wants define it, e.g., -stdlib=libstdc++
+			set(STDLIB -stdlib=${_STDLIB})
+	endif()
+    endif()
+
+    if(NOT _FLAG)
+		message(FATAL_ERROR "You have to write any flag in your [cpp-std] section, e.g., c++11")
+    endif()
+    if("${_FLAG}" STREQUAL "latest")
+        # latest = c++14 at this momment (c++17 will be the next)
+        set(_FLAG "c++14")
+    endif()
+
+    if(NOT MSVC)  # MSVC enables STD features (depending on its version), user doesn't need to pass anything
+	ACTIVATE_CXX_FLAG(${_TARGET} ${_FLAG} ${TRANSITIVITY} "${STDLIB}")
+    else()
+	message(STATUS "Check if your Visual C++ compiler enables ${_FLAG} STD features else try to get a newer version")
+    endif()
+endmacro()
+
+
+#=============================================================================#
+# [PRIVATE/INTERNAL]
+#
+# ACTIVATE_CXX_FLAG(TARGET FLAG TRANSITIVITY NO_REQUIRED)
+#
+#        TARGET             - Target name
+#        FLAG               - c++11, c++14, etc.
+#        TRANSITIVITY       - PUBLIC, PRIVATE, INTERFACE
+#        STDLIB             - it is only passed if OS == Darwin
+#
+# Activates the valid CMake flag to apply it to your project target, main
+# target, etc.
+#
+#=============================================================================#
+
+macro(ACTIVATE_CXX_FLAG TARGET FLAG TRANSITIVITY STDLIB)
+	include(CheckCXXCompilerFlag)
+
+    GET_ENABLE_CXXFLAGS_TO_CHECK(${FLAG} ENABLE_CXXFLAGS_TO_CHECK)
+    CHECK_CXX_FLAG(VALID_CXXFLAG "-std=${FLAG};${ENABLE_CXXFLAGS_TO_CHECK}")
+
+    if(NOT VALID_CXXFLAG)
+       message(FATAL_ERROR "Compiler ${CMAKE_CXX_COMPILER} has no ${FLAG} support")
+    endif()
+
+    target_compile_options(${TARGET} ${TRANSITIVITY} ${VALID_CXXFLAG} ${STDLIB})
+    message(STATUS "Activated ${VALID_CXXFLAG} ${STDLIB} for ${TRANSITIVITY} target '${TARGET}'")
+endmacro()
+
+#=============================================================================#
+# [PRIVATE/INTERNAL]
+#
+# GET_ENABLE_CXXFLAGS_TO_CHECK(FLAG NO_REQUIRED ENABLE_CXXFLAGS_TO_CHECK)
+#
+#        FLAG                        - c++11, c++14, etc.
+#        ENABLE_CXXFLAGS_TO_CHECK    - List of flags to check
+#
+# Returns the ENABLE_CXXFLAGS_TO_CHECK variable with the complete list of
+# CXX flags
+#
+#=============================================================================#
+
+macro(GET_ENABLE_CXXFLAGS_TO_CHECK FLAG ENABLE_CXXFLAGS_TO_CHECK)
+	# Possible CXX flags (based on C++ Standards)
+	set(CPP_14_FLAGS -std=gnu++1z
+                     -std=c++1z
+                     -std=c++1y
+                     -std=gnu++1y
+                     -std=gnu++14)
+
+	set(CPP_11_FLAGS -std=c++0x
+                     -std=gnu++11
+                     -std=gnu++0x)
+
+	set(CPP_03_FLAGS -std=gnu++03)
+
+	set(CPP_98_FLAGS -std=gnu++98)
+
+    if("${FLAG}" STREQUAL "c++14")
+        set(${ENABLE_CXXFLAGS_TO_CHECK} ${CPP_14_FLAGS})
+    elseif("${FLAG}" STREQUAL "c++11")
+        set(${ENABLE_CXXFLAGS_TO_CHECK} ${CPP_11_FLAGS})
+    elseif("${FLAG}" STREQUAL "c++03")
+        set(${ENABLE_CXXFLAGS_TO_CHECK} ${CPP_03_FLAGS})
+    elseif("${FLAG}" STREQUAL "c++98")
+        set(${ENABLE_CXXFLAGS_TO_CHECK} ${CPP_98_FLAGS})
+    else()
+	set(${ENABLE_CXXFLAGS_TO_CHECK} ${FLAG})
+    endif()
+endmacro()
+
+#=============================================================================#
+# [PRIVATE/INTERNAL]
+#
+# CHECK_CXX_FLAG(VALID_CXXFLAG ENABLE_CXXFLAGS_TO_CHECK)
+#
+#        VALID_CXXFLAG              - returned valid CXX flag value
+#        ENABLE_CXXFLAGS_TO_CHECK   - list of CXX flags to check
+#
+# Checks if there is any CXX flag, from total passed, valid for your compiler
+#
+#=============================================================================#
+
+macro(CHECK_CXX_FLAG VALID_CXXFLAG ENABLE_CXXFLAGS_TO_CHECK)
+	foreach(flag ${ENABLE_CXXFLAGS_TO_CHECK})
+	    string(REPLACE "-std=" "_" flag_var ${flag})
+	    string(REPLACE "+" "x" flag_var ${flag_var})
+	    CHECK_CXX_COMPILER_FLAG("${flag}" COMPILER_HAS_CXX_FLAG${flag_var})
+	    if(COMPILER_HAS_CXX_FLAG${flag_var})
+	        set(${VALID_CXXFLAG} ${flag})
+	        break()
+	    endif()
+	endforeach()
+endmacro()
