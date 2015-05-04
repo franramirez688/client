@@ -99,6 +99,7 @@ class CPPBlockTargets(object):
         self.exes = []  # Of CPPExeTargets
         self.tests = set()  # Of CPPExeTargets
         self.cpp_std_flags = []
+        self.global_flag = ''
 
     @property
     def filename(self):
@@ -116,7 +117,9 @@ SET(BII_BLOCK_TESTS {tests})
         _flags = '"FLAG %s"' % '"\n\t\t\t"FLAG '.join(self.cpp_std_flags) if self.cpp_std_flags \
                                                                           else ''
         cpp_std_content = 'SET(BII_CMAKE_CPP_FLAGS %s)\n' % _flags
+        cpp_global_flag = 'SET(BII_CMAKE_CPP_GLOBAL_FLAG %s)\n' % self.global_flag
         vars_content.append(cpp_std_content)
+        vars_content.append(cpp_global_flag)
         exes = [t.simple_name for t in self.exes]
         tests = [t.simple_name for t in self.tests]
         exes_list = exe_list.format(executables="\n\t\t\t".join(sorted(exes)),

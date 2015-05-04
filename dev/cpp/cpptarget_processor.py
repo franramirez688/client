@@ -164,11 +164,7 @@ class CPPTargetProcessor(object):
 
         test_patterns = {b.block_name: b.tests for b in hive_holder.block_holders}
         settings = hive_holder.settings
-
-        for block_holder in hive_holder.block_holders:
-            b_name = block_holder.block_name
-            block_target = get_target(b_name)
-            block_target.cpp_std_flags = block_holder.cpp_std
+        self._process_cpp_flag(hive_holder, get_target)
 
         for main, main_info in mains.iteritems():
             # Creation of main target
@@ -221,3 +217,22 @@ class CPPTargetProcessor(object):
                 target.data.add(block_cell_name)
 
         return targets
+
+    def _process_cpp_flag(self, hive_holder, get_target):
+        """ Process all the cpp flags written in the biicode.conf file
+        """
+        bii_config_deps = hive_holder.hive_dependencies.bii_config
+        global_flag = ''
+
+        def _get_block_cpp_flag(cpp_std_flags):
+            for flag in cpp_std_flags:
+                if "TARGET" not in flag:
+                    return flag.split()[0]
+
+        def _get_global_flag(block_name, requirements):
+            pass
+
+        for block_holder in hive_holder.block_holders:
+            b_name = block_holder.block_name
+            block_target = get_target(b_name)
+            block_target.cpp_std_flags = block_holder.cpp_std
