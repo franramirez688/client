@@ -8,6 +8,7 @@ from biicode.common.model.brl.block_cell_name import BlockCellName
 from fnmatch import fnmatch
 from biicode.client.workspace.bii_paths import DEP_DIR, SRC_DIR
 from biicode.common.model.cells import VirtualCell
+from biicode.common.exception import BiiException
 
 
 class CPPTargetProcessor(object):
@@ -222,17 +223,50 @@ class CPPTargetProcessor(object):
         """ Process all the cpp flags written in the biicode.conf file
         """
         bii_config_deps = hive_holder.hive_dependencies.bii_config
-        global_flag = ''
+        global_flag = set()
+        global_requirements = set()
 
         def _get_block_cpp_flag(cpp_std_flags):
+            """ calculate the block global flag and return it
+            """
             for flag in cpp_std_flags:
-                if "TARGET" not in flag:
-                    return flag.split()[0]
+                flag = flag.lower()
+                if " target " not in flag:
+                    # Then flag affects all the block
+                    flag = flag.split()[0]
+                    if 'c' in flag or 'c++' in flag:
+                        return flag
+                    raise BiiException("C/C++ block flag must be in the first place")
 
-        def _get_global_flag(block_name, requirements):
-            pass
-
+        # First of all, to search on opened block_holders
         for block_holder in hive_holder.block_holders:
-            b_name = block_holder.block_name
-            block_target = get_target(b_name)
-            block_target.cpp_std_flags = block_holder.cpp_std
+            cpp_flags = block_holder.cpp_std
+            if cpp_flags:
+                # Saving cpp flags in block target
+                b_name = block_holder.block_name
+                block_target = get_target(b_name)
+                block_target.cpp_std_flags = cpp_flags
+                _global_flag = _get_block_cpp_flag(block_holder.cpp_std)
+                if _global_flag:
+                    global_flag.add(_global_flag)
+                    # Saving all the block name dependencies to search on them later
+                    for block_name, _ in block_holder.requirements.iteritems():
+                        # Avoid saving a block_name that it will be analyzed along this loop
+                        if not hive_holder.block_holders.get(block_name):
+                            global_requirements.add(str(block_name))
+
+        # Now, we analyze if deps have global cpp flags
+        while global_requirements:
+            _new_requirements_deps = set()  # create this aux variable to save new requirements
+            for b_name in global_requirements:
+                bii_config = bii_config_deps.get(b_name)
+                _global_flag = _get_block_cpp_flag(bii_config.cpp_std)
+                if _global_flag:
+                    global_flag.add(_global_flag)
+                    for block_name, _ in bii_config.requirements.iteritems():
+                        # Avoid saving a block_name that it will be analyzed along this loop
+                        if not str(block_name) in global_requirements:
+                            _new_requirements_deps.add(str(block_name))
+            global_requirements = _new_requirements_deps
+
+        # TODO: search on global_flag and select the maximum
