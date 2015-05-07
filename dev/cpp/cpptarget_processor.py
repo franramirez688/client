@@ -11,6 +11,16 @@ from biicode.common.model.cells import VirtualCell
 from biicode.common.exception import BiiException
 
 
+# They are ordered with this sintax, index[0] == MAX_CPP_FLAG
+CPP_STD_VERSIONS = ["c++14",
+                    "c++11",
+                    "c++03",
+                    "c++98"]
+# GLOBAL_CPP_FLAG == MAX_CPP_FLAG. It's a lambda function and receive a list/set of flags
+GLOBAL_CPP_FLAG = lambda cpp_flags: CPP_STD_VERSIONS[min([CPP_STD_VERSIONS.index(flag)
+                                                          for flag in cpp_flags])]
+
+
 class CPPTargetProcessor(object):
 
     def __init__(self, client_hive_manager):
@@ -225,6 +235,7 @@ class CPPTargetProcessor(object):
         bii_config_deps = hive_holder.hive_dependencies.bii_config
         global_flag = set()
         global_requirements = set()
+        targets_with_cpp_global = []
 
         def _get_block_cpp_flag(cpp_std_flags):
             """ calculate the block global flag and return it
@@ -234,8 +245,10 @@ class CPPTargetProcessor(object):
                 if " target " not in flag:
                     # Then flag affects all the block
                     flag = flag.split()[0]
-                    if 'c' in flag or 'c++' in flag:
+                    if 'c++' in flag:
                         return flag
+                    elif 'c' in flag:  # TODO: transitive C flags?
+                        return
                     raise BiiException("C/C++ block flag must be in the first place")
 
         # First of all, to search on opened block_holders
@@ -249,13 +262,14 @@ class CPPTargetProcessor(object):
                 _global_flag = _get_block_cpp_flag(block_holder.cpp_std)
                 if _global_flag:
                     global_flag.add(_global_flag)
+                    targets_with_cpp_global.append(block_target)
                     # Saving all the block name dependencies to search on them later
                     for block_name, _ in block_holder.requirements.iteritems():
                         # Avoid saving a block_name that it will be analyzed along this loop
                         if not hive_holder.block_holders.get(block_name):
                             global_requirements.add(str(block_name))
 
-        # Now, we analyze if deps have global cpp flags
+        # Now, we analyze if deps have global cpp flags recursively
         while global_requirements:
             _new_requirements_deps = set()  # create this aux variable to save new requirements
             for b_name in global_requirements:
@@ -263,10 +277,15 @@ class CPPTargetProcessor(object):
                 _global_flag = _get_block_cpp_flag(bii_config.cpp_std)
                 if _global_flag:
                     global_flag.add(_global_flag)
+                    targets_with_cpp_global.append(get_target(b_name))
                     for block_name, _ in bii_config.requirements.iteritems():
                         # Avoid saving a block_name that it will be analyzed along this loop
                         if not str(block_name) in global_requirements:
                             _new_requirements_deps.add(str(block_name))
             global_requirements = _new_requirements_deps
 
-        # TODO: search on global_flag and select the maximum
+        # Try to compile all the blocks with the max STD compiler version flag
+        if global_flag:
+            max_cpp_flag = GLOBAL_CPP_FLAG(global_flag)
+            for _cpp_block_target in targets_with_cpp_global:
+                _cpp_block_target.global_flag = max_cpp_flag
