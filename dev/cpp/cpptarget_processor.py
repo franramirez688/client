@@ -233,8 +233,8 @@ class CPPTargetProcessor(object):
         """ Process all the cpp flags written in the biicode.conf file
         """
         bii_config_deps = hive_holder.hive_dependencies.bii_config
+        block_name_deps = hive_holder.hive_dependencies.block_name_deps
         global_flag = set()
-        global_requirements = set()
         targets_with_cpp_global = []
 
         def _get_block_cpp_flag(cpp_std_flags):
@@ -263,26 +263,14 @@ class CPPTargetProcessor(object):
                 if _global_flag:
                     global_flag.add(_global_flag)
                     targets_with_cpp_global.append(block_target)
-                    # Saving all the block name dependencies to search on them later
-                    for block_name, _ in block_holder.requirements.iteritems():
-                        # Avoid saving a block_name that it will be analyzed along this loop
-                        if not hive_holder.block_holders.get(block_name):
-                            global_requirements.add(str(block_name))
 
         # Now, we analyze if deps have global cpp flags recursively
-        while global_requirements:
-            _new_requirements_deps = set()  # create this aux variable to save new requirements
-            for b_name in global_requirements:
-                bii_config = bii_config_deps.get(b_name)
-                _global_flag = _get_block_cpp_flag(bii_config.cpp_std)
-                if _global_flag:
-                    global_flag.add(_global_flag)
-                    targets_with_cpp_global.append(get_target(b_name))
-                    for block_name, _ in bii_config.requirements.iteritems():
-                        # Avoid saving a block_name that it will be analyzed along this loop
-                        if not str(block_name) in global_requirements:
-                            _new_requirements_deps.add(str(block_name))
-            global_requirements = _new_requirements_deps
+        for b_name in block_name_deps:
+            bii_config = bii_config_deps.get(b_name)
+            _global_flag = _get_block_cpp_flag(bii_config.cpp_std)
+            if _global_flag:
+                global_flag.add(_global_flag)
+                targets_with_cpp_global.append(get_target(b_name))
 
         # Try to compile all the blocks with the max STD compiler version flag
         if global_flag:
