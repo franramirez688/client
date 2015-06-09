@@ -16,9 +16,19 @@ CPP_STD_VERSIONS = ["c++14",
                     "c++11",
                     "c++03",
                     "c++98"]
+
+
 # GLOBAL_CPP_FLAG == MAX_CPP_FLAG. It's a lambda function and receive a list/set of flags
-GLOBAL_CPP_FLAG = lambda cpp_flags: CPP_STD_VERSIONS[min([CPP_STD_VERSIONS.index(flag)
-                                                          for flag in cpp_flags])]
+def get_global_cpp_flag(cpp_flags, output):
+    valid_flags = []
+    for flag in cpp_flags:
+        if flag not in CPP_STD_VERSIONS:
+            output.warn("Flag %s is not in allowed options %s. "
+                        "It will be ignored" % (flag, CPP_STD_VERSIONS))
+            continue
+        valid_flags.append(CPP_STD_VERSIONS.index(flag))
+    if valid_flags:
+        return CPP_STD_VERSIONS[min(valid_flags)]
 
 
 class CPPTargetProcessor(object):
@@ -274,6 +284,6 @@ class CPPTargetProcessor(object):
 
         # Try to compile all the blocks with the max STD compiler version flag
         if global_flag:
-            max_cpp_flag = GLOBAL_CPP_FLAG(global_flag)
+            max_cpp_flag = get_global_cpp_flag(global_flag, self.user_io.out)
             for _cpp_block_target in targets_with_cpp_global:
                 _cpp_block_target.global_flag = max_cpp_flag
